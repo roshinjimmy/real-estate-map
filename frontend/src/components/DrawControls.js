@@ -4,9 +4,9 @@ import L from "leaflet";
 import "leaflet-draw/dist/leaflet.draw.css";
 import "leaflet-draw"; // Ensure Leaflet Draw is imported
 
-const DrawControls = ({ setFilteredProperties, allProperties }) => {
+const DrawControls = ({ setFilteredProperties, filteredProperties }) => {
   const map = useMap(); // Get map instance from React-Leaflet
-  const drawControlRef = useRef(null); // Store Draw Control to prevent duplicates
+  const drawControlRef = useRef(null); // Store reference to Draw Control
 
   useEffect(() => {
     if (!map) {
@@ -16,17 +16,15 @@ const DrawControls = ({ setFilteredProperties, allProperties }) => {
 
     console.log("✅ Leaflet Map found, adding Draw Controls...");
 
-    // Prevent adding multiple draw toolbars
+    // Prevent adding the controls more than once
     if (drawControlRef.current) {
-      console.warn("⚠️ Draw Controls already exist, skipping re-addition.");
+      console.log("⚠️ Drawing tools already added!");
       return;
     }
 
-    // Create a FeatureGroup to store drawn items
     const drawnItems = new L.FeatureGroup();
     map.addLayer(drawnItems);
 
-    // Initialize Leaflet Draw toolbar
     drawControlRef.current = new L.Control.Draw({
       draw: {
         polygon: true,
@@ -42,9 +40,8 @@ const DrawControls = ({ setFilteredProperties, allProperties }) => {
     });
 
     map.addControl(drawControlRef.current);
-    console.log("✅ Draw Controls added!");
 
-    // Event: When a shape is created
+    // Handle drawing event
     map.on(L.Draw.Event.CREATED, (event) => {
       console.log("🖊️ Shape drawn:", event.layer);
       drawnItems.clearLayers();
@@ -52,15 +49,20 @@ const DrawControls = ({ setFilteredProperties, allProperties }) => {
       const drawnLayer = event.layer;
       let filtered = [];
 
+      // Filtering logic based on drawn shape type
       if (drawnLayer instanceof L.Rectangle || drawnLayer instanceof L.Circle) {
         const bounds = drawnLayer.getBounds();
         console.log("📍 Shape bounds:", bounds);
-        filtered = allProperties.filter((property) => bounds.contains([property.lat, property.lng]));
+        filtered = filteredProperties.filter((property) =>
+          bounds.contains([property.coordinates.lat, property.coordinates.lng])
+        );
       } else if (drawnLayer instanceof L.Polygon) {
         const latlngs = drawnLayer.getLatLngs()[0];
         console.log("📐 Polygon coordinates:", latlngs);
         const polygon = L.polygon(latlngs);
-        filtered = allProperties.filter((property) => polygon.getBounds().contains([property.lat, property.lng]));
+        filtered = filteredProperties.filter((property) =>
+          L.Util.pointInPolygon([property.coordinates.lat, property.coordinates.lng], latlngs)
+        );
       }
 
       console.log("🏠 Filtered properties:", filtered);
@@ -70,10 +72,10 @@ const DrawControls = ({ setFilteredProperties, allProperties }) => {
     // Event: When shapes are deleted, reset properties
     map.on(L.Draw.Event.DELETED, () => {
       console.log("🗑️ Shape deleted, resetting properties...");
-      setFilteredProperties(allProperties);
+      setFilteredProperties(filteredProperties);
     });
 
-  }, [map, setFilteredProperties, allProperties]);
+  }, [map, setFilteredProperties, filteredProperties]);
 
   return null;
 };

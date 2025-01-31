@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useRef } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import React, { useEffect, useRef, useState } from "react";
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { useMapEvents } from 'react-leaflet'; // Import useMapEvents
 import L from "leaflet";
 import DrawControls from "./DrawControls"; // Import Draw Tools
 import "leaflet/dist/leaflet.css";
@@ -14,49 +15,58 @@ const customIcon = new L.Icon({
   shadowSize: [41, 41]
 });
 
-// Sample property data
-const allProperties = [
-  { id: 1, lat: 37.7749, lng: -122.4194, price: "$800,000", address: "123 Main St" },
-  { id: 2, lat: 37.7849, lng: -122.4094, price: "$950,000", address: "456 Oak St" },
-  { id: 3, lat: 37.7949, lng: -122.4294, price: "$1,200,000", address: "789 Pine St" },
-];
+const MapEventHandler = ({ fetchProperties, lastFetchedBounds }) => {
+  useMapEvents({
+    moveend: (event) => {
+      const map = event.target;
+      const bounds = map.getBounds();
+      const queryBounds = {
+        north: bounds.getNorth(),
+        east: bounds.getEast(),
+        south: bounds.getSouth(),
+        west: bounds.getWest(),
+      };
 
-// Component to center map on selected property
-const RecenterMap = ({ selectedProperty }) => {
-  const map = useMap();
-  const popupRef = useRef(null);
-
-  useEffect(() => {
-    if (selectedProperty) {
-      console.log("📌 Centering map on:", selectedProperty);
-      map.setView([selectedProperty.lat, selectedProperty.lng], 14, { animate: true });
-
-      // Find the corresponding marker and open its popup
-      if (popupRef.current) {
-        popupRef.current.openPopup();
+      // Only fetch new properties if bounds have changed
+      if (
+        queryBounds.north !== lastFetchedBounds.north ||
+        queryBounds.south !== lastFetchedBounds.south ||
+        queryBounds.east !== lastFetchedBounds.east ||
+        queryBounds.west !== lastFetchedBounds.west
+      ) {
+        console.log("🔄 Fetching properties for new bounds:", queryBounds);
+        fetchProperties(queryBounds);
       }
-    }
-  }, [selectedProperty, map]);
+    },
+  });
 
   return null;
 };
 
-const MapComponent = ({ selectedProperty, setFilteredProperties }) => {
-  const popupRefs = useRef({}); // Store references to popups
+const MapComponent = ({ selectedProperty, setFilteredProperties, fetchProperties, filteredProperties }) => {
+  const mapRef = useRef(null); // Store the map instance
+
+  useEffect(() => {
+    // Ensure the map is ready to handle the new markers
+    if (filteredProperties.length > 0) {
+      console.log("Markers should be rendered now.");
+    }
+  }, [filteredProperties]);
 
   return (
-    <MapContainer center={[37.7749, -122.4194]} zoom={12} style={{ height: "100%", width: "100%" }}>
+    <MapContainer
+      center={[37.7749, -122.4194]}
+      zoom={12}
+      style={{ height: "100%", width: "100%" }}
+      whenCreated={(map) => (mapRef.current = map)} // Initialize map instance
+    >
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      <DrawControls setFilteredProperties={setFilteredProperties} allProperties={allProperties} />
-      <RecenterMap selectedProperty={selectedProperty} />
-      {allProperties.map((property) => (
-        <Marker
-          key={property.id}
-          position={[property.lat, property.lng]}
-          icon={customIcon}
-          ref={(el) => (popupRefs.current[property.id] = el)}
-        >
-          <Popup ref={(el) => (popupRefs.current[property.id] = el)}>
+      <DrawControls setFilteredProperties={setFilteredProperties} filteredProperties={filteredProperties} />
+      <MapEventHandler fetchProperties={fetchProperties} lastFetchedBounds={filteredProperties} />
+
+      {filteredProperties.map((property) => (
+        <Marker key={property.id} position={[property.coordinates.lat, property.coordinates.lng]} icon={customIcon}>
+          <Popup>
             <strong>{property.price}</strong> <br /> {property.address}
           </Popup>
         </Marker>
